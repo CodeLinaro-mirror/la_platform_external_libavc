@@ -876,7 +876,6 @@ WORD32 ih264d_parse_inter_slice_data_cabac(dec_struct_t * ps_dec,
 
         if(i2_cur_mb_addr > ps_dec->ps_cur_sps->u2_max_mb_addr)
         {
-            ret = ERROR_MB_ADDRESS_T;
             break;
         }
 
@@ -1183,7 +1182,6 @@ WORD32 ih264d_parse_inter_slice_data_cavlc(dec_struct_t * ps_dec,
 
         if(i2_cur_mb_addr > ps_dec->ps_cur_sps->u2_max_mb_addr)
         {
-            ret = ERROR_MB_ADDRESS_T;
             break;
         }
 
@@ -1655,9 +1653,17 @@ WORD32 ih264d_mark_err_slice_skip(dec_struct_t * ps_dec,
         WORD32 size;
         UWORD8 *pu1_buf;
 
-        num_entries = MIN(MAX_FRAMES, ps_dec->u4_num_ref_frames_at_init);
-        num_entries = 2 * ((2 * num_entries) + 1);
-
+        num_entries = MAX_FRAMES;
+        if((1 >= ps_dec->ps_cur_sps->u1_num_ref_frames) &&
+            (0 == ps_dec->i4_display_delay))
+        {
+            num_entries = 1;
+        }
+        num_entries = ((2 * num_entries) + 1);
+        if(BASE_PROFILE_IDC != ps_dec->ps_cur_sps->u1_profile_idc)
+        {
+            num_entries *= 2;
+        }
         size = num_entries * sizeof(void *);
         size += PAD_MAP_IDX_POC * sizeof(void *);
 
@@ -2021,8 +2027,17 @@ WORD32 ih264d_parse_pslice(dec_struct_t *ps_dec, UWORD16 u2_first_mb_in_slice)
             WORD32 num_entries;
             WORD32 size;
 
-            num_entries = MIN(MAX_FRAMES, ps_dec->u4_num_ref_frames_at_init);
-            num_entries = 2 * ((2 * num_entries) + 1);
+            num_entries = MAX_FRAMES;
+            if((1 >= ps_dec->ps_cur_sps->u1_num_ref_frames) &&
+                (0 == ps_dec->i4_display_delay))
+            {
+                num_entries = 1;
+            }
+            num_entries = ((2 * num_entries) + 1);
+            if(BASE_PROFILE_IDC != ps_dec->ps_cur_sps->u1_profile_idc)
+            {
+                num_entries *= 2;
+            }
 
             size = num_entries * sizeof(void *);
             size += PAD_MAP_IDX_POC * sizeof(void *);
