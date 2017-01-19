@@ -1417,7 +1417,7 @@ WORD32 ih264d_allocate_static_bufs(iv_obj_t **dec_hdl, void *pv_api_ip, void *pv
     ps_dec->pu4_mbaff_wt_mat = pv_buf;
 
     size = sizeof(UWORD32) * 2 * 3
-                        * (MAX_FRAMES * MAX_FRAMES);
+                        * ((MAX_FRAMES << 1) * (MAX_FRAMES << 1));
     pv_buf = pf_aligned_alloc(pv_mem_ctxt, 128, size);
     RETURN_IF((NULL == pv_buf), IV_FAIL);
     ps_dec->pu4_wts_ofsts_mat = pv_buf;
@@ -2083,6 +2083,7 @@ WORD32 ih264d_video_decode(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
             {
                 /* a start code has already been found earlier in the same process call*/
                 frame_data_left = 0;
+                header_data_left = 0;
                 continue;
             }
 
@@ -2164,8 +2165,9 @@ WORD32 ih264d_video_decode(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
         WORD32 prev_slice_err;
         pocstruct_t temp_poc;
         WORD32 ret1;
-
-        num_mb_skipped = (ps_dec->u2_frm_ht_in_mbs * ps_dec->u2_frm_wd_in_mbs)
+        WORD32 ht_in_mbs;
+        ht_in_mbs = ps_dec->u2_pic_ht >> (4 + ps_dec->ps_cur_slice->u1_field_pic_flag);
+        num_mb_skipped = (ht_in_mbs * ps_dec->u2_frm_wd_in_mbs)
                             - ps_dec->u2_total_mbs_coded;
 
         if(ps_dec->u4_first_slice_in_pic && (ps_dec->u4_pic_buf_got == 0))
