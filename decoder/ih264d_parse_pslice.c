@@ -1462,6 +1462,11 @@ WORD32 ih264d_mark_err_slice_skip(dec_struct_t * ps_dec,
         ih264d_err_pic_dispbuf_mgr(ps_dec);
         return 0;
     }
+
+    if(ps_dec->ps_cur_slice->u1_mbaff_frame_flag && (num_mb_skip & 1))
+    {
+        num_mb_skip++;
+    }
     ps_dec->ps_dpb_cmds->u1_long_term_reference_flag = 0;
     if(prev_slice_err == 1)
     {
@@ -1581,8 +1586,13 @@ WORD32 ih264d_mark_err_slice_skip(dec_struct_t * ps_dec,
         {
             // Slice data corrupted
             // in the case of mbaff, conceal from the even mb.
-            u1_num_mbs = (ps_dec->u4_num_mbs_cur_nmb >> u1_mbaff ) << u1_mbaff;
+            if((u1_mbaff) && (ps_dec->u4_num_mbs_cur_nmb & 1))
+            {
+                ps_dec->u4_num_mbs_cur_nmb = ps_dec->u4_num_mbs_cur_nmb - 1;
+                ps_dec->u2_cur_mb_addr--;
+            }
 
+            u1_num_mbs = ps_dec->u4_num_mbs_cur_nmb;
             if(u1_num_mbs)
             {
                 ps_cur_mb_info = ps_dec->ps_nmb_info + u1_num_mbs - 1;
