@@ -1348,6 +1348,10 @@ WORD32 ih264d_parse_inter_slice_data_cavlc(dec_struct_t * ps_dec,
         if(u1_mbaff)
         {
             ih264d_update_mbaff_left_nnz(ps_dec, ps_cur_mb_info);
+            if(!uc_more_data_flag && !i2_mb_skip_run && (0 == (i2_cur_mb_addr & 1)))
+            {
+                return ERROR_EOB_FLUSHBITS_T;
+            }
         }
         /**************************************************************/
         /* Get next Macroblock address                                */
@@ -1500,7 +1504,7 @@ WORD32 ih264d_mark_err_slice_skip(dec_struct_t * ps_dec,
             //if valid SPS PPS is not found return error
             if(j == -1)
             {
-                return ERROR_INV_SPS_PPS_T;
+                return ERROR_INV_SLICE_HDR_T;
             }
 
             /* call ih264d_start_of_pic only if it was not called earlier*/
