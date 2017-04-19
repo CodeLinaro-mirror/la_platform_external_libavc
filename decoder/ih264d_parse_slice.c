@@ -441,6 +441,8 @@ WORD32 ih264d_start_of_pic(dec_struct_t *ps_dec,
             /*make first entry of list0 point to cur pic,so that if first Islice is in error, ref pic struct will have valid entries*/
             ps_dec->ps_ref_pic_buf_lx[0] = ps_dec->ps_dpb_mgr->ps_init_dpb[0];
             *(ps_dec->ps_dpb_mgr->ps_init_dpb[0][0]) = *ps_cur_pic;
+            /* Initialize for field reference as well */
+            *(ps_dec->ps_dpb_mgr->ps_init_dpb[0][MAX_REF_BUFS]) = *ps_cur_pic;
         }
 
         if(!ps_dec->ps_cur_pic)
@@ -1054,8 +1056,7 @@ WORD32 ih264d_parse_decode_slice(UWORD8 u1_is_idr_slice,
 
     /*we currently don not support ASO*/
     if(((u2_first_mb_in_slice << ps_cur_slice->u1_mbaff_frame_flag)
-                    <= ps_dec->u2_cur_mb_addr) && (ps_dec->u2_cur_mb_addr != 0)
-                    && (ps_dec->u4_first_slice_in_pic != 0))
+                    <= ps_dec->u2_cur_mb_addr) && (ps_dec->u4_first_slice_in_pic == 0))
     {
         return ERROR_CORRUPTED_SLICE;
     }
@@ -1342,6 +1343,8 @@ WORD32 ih264d_parse_decode_slice(UWORD8 u1_is_idr_slice,
                 ps_cur_slice->u1_redundant_pic_cnt = u1_redundant_pic_cnt;
                 ps_cur_slice->u1_nal_ref_idc = u1_nal_ref_idc;
                 ps_cur_slice->u1_pic_order_cnt_type = u1_pic_order_cnt_type;
+                ps_cur_slice->u1_mbaff_frame_flag = ps_seq->u1_mb_aff_flag
+                        && (!u1_field_pic_flag);
             }
         }
         else
@@ -1429,6 +1432,11 @@ WORD32 ih264d_parse_decode_slice(UWORD8 u1_is_idr_slice,
         ps_dec->u2_cur_slice_num++;
     }
 
+    // in the case of single core increment ps_decode_cur_slice
+    if((ps_dec->u1_separate_parse == 0) && (ps_dec->u4_first_slice_in_pic == 0))
+    {
+        ps_dec->ps_decode_cur_slice++;
+    }
     ps_dec->u1_slice_header_done = 0;
 
     /*--------------------------------------------------------------------*/

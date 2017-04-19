@@ -533,18 +533,14 @@ WORD32 ih264d_parse_sps(dec_struct_t *ps_dec, dec_bit_stream_t *ps_bitstrm)
     )
     {
 
-        if((uc_constraint_set1_flag != 1) && (uc_constraint_set0_flag != 1))
+        /* Apart from Baseline, main and high profile,
+         * only extended profile is supported provided
+         * uc_constraint_set0_flag or uc_constraint_set1_flag are set to 1
+         */
+        if((u1_profile_idc != EXTENDED_PROFILE_IDC) ||
+           ((uc_constraint_set1_flag != 1) && (uc_constraint_set0_flag != 1)))
         {
-            if(NULL != ps_dec)
-            {
-                UWORD32 i4_error_code;
-                i4_error_code = ERROR_FEATURE_UNAVAIL;
-                return i4_error_code;
-            }
-            else
-            {
-                return (ERROR_FEATURE_UNAVAIL);
-            }
+            return (ERROR_FEATURE_UNAVAIL);
         }
     }
 
@@ -1082,7 +1078,9 @@ WORD32 ih264d_parse_nal_unit(iv_obj_t *dec_hdl,
             u1_nal_unit_type = NAL_UNIT_TYPE(u1_first_byte);
             // if any other nal unit other than slice nal is encountered in between a
             // frame break out of loop without consuming header
-            if((ps_dec->u2_total_mbs_coded != 0) && (u1_nal_unit_type > IDR_SLICE_NAL))
+            if ((ps_dec->u4_slice_start_code_found == 1)
+                    && (ps_dec->u1_pic_decode_done != 1)
+                    && (u1_nal_unit_type > IDR_SLICE_NAL))
             {
                 return ERROR_INCOMPLETE_FRAME;
             }

@@ -135,6 +135,10 @@ UWORD32 ih264d_get_extra_mem_external(UWORD32 width, UWORD32 height);
 WORD32 ih264d_get_frame_dimensions(iv_obj_t *dec_hdl,
                                    void *pv_api_ip,
                                    void *pv_api_op);
+WORD32 ih264d_get_vui_params(iv_obj_t *dec_hdl,
+                             void *pv_api_ip,
+                             void *pv_api_op);
+
 WORD32 ih264d_set_num_cores(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op);
 
 WORD32 ih264d_deblock_display(dec_struct_t *ps_dec);
@@ -743,7 +747,36 @@ static IV_API_CALL_STATUS_T api_check_struct_sanity(iv_obj_t *ps_handle,
 
                     break;
                 }
+                case IH264D_CMD_CTL_GET_VUI_PARAMS:
+                {
+                    ih264d_ctl_get_vui_params_ip_t *ps_ip;
+                    ih264d_ctl_get_vui_params_op_t *ps_op;
 
+                    ps_ip =
+                                    (ih264d_ctl_get_vui_params_ip_t *)pv_api_ip;
+                    ps_op =
+                                    (ih264d_ctl_get_vui_params_op_t *)pv_api_op;
+
+                    if(ps_ip->u4_size
+                                    != sizeof(ih264d_ctl_get_vui_params_ip_t))
+                    {
+                        ps_op->u4_error_code |= 1 << IVD_UNSUPPORTEDPARAM;
+                        ps_op->u4_error_code |=
+                                        IVD_IP_API_STRUCT_SIZE_INCORRECT;
+                        return IV_FAIL;
+                    }
+
+                    if(ps_op->u4_size
+                                    != sizeof(ih264d_ctl_get_vui_params_op_t))
+                    {
+                        ps_op->u4_error_code |= 1 << IVD_UNSUPPORTEDPARAM;
+                        ps_op->u4_error_code |=
+                                        IVD_OP_API_STRUCT_SIZE_INCORRECT;
+                        return IV_FAIL;
+                    }
+
+                    break;
+                }
                 case IH264D_CMD_CTL_SET_NUM_CORES:
                 {
                     ih264d_ctl_set_num_cores_ip_t *ps_ip;
@@ -1384,7 +1417,7 @@ WORD32 ih264d_allocate_static_bufs(iv_obj_t **dec_hdl, void *pv_api_ip, void *pv
     ps_dec->pu4_mbaff_wt_mat = pv_buf;
 
     size = sizeof(UWORD32) * 2 * 3
-                        * (MAX_FRAMES * MAX_FRAMES);
+                        * ((MAX_FRAMES << 1) * (MAX_FRAMES << 1));
     pv_buf = pf_aligned_alloc(pv_mem_ctxt, 128, size);
     RETURN_IF((NULL == pv_buf), IV_FAIL);
     ps_dec->pu4_wts_ofsts_mat = pv_buf;
@@ -2050,6 +2083,7 @@ WORD32 ih264d_video_decode(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
             {
                 /* a start code has already been found earlier in the same process call*/
                 frame_data_left = 0;
+                header_data_left = 0;
                 continue;
             }
 
@@ -2146,9 +2180,10 @@ WORD32 ih264d_video_decode(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
         ret1 = ih264d_mark_err_slice_skip(ps_dec, num_mb_skipped, ps_dec->u1_nal_unit_type == IDR_SLICE_NAL, ps_dec->ps_cur_slice->u2_frame_num,
                                    &temp_poc, prev_slice_err);
 
-        if((ret1 == ERROR_UNAVAIL_PICBUF_T) || (ret1 == ERROR_UNAVAIL_MVBUF_T))
+        if((ret1 == ERROR_UNAVAIL_PICBUF_T) || (ret1 == ERROR_UNAVAIL_MVBUF_T) ||
+                       (ret1 == ERROR_INV_SPS_PPS_T))
         {
-            return IV_FAIL;
+            ret = ret1;
         }
     }
 
@@ -2284,7 +2319,8 @@ WORD32 ih264d_video_decode(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
         /* if new frame in not found (if we are still getting slices from previous frame)
          * ih264d_deblock_display is not called. Such frames will not be added to reference /display
          */
-        if((ps_dec->ps_dec_err_status->u1_err_flag & REJECT_CUR_PIC) == 0)
+        if (((ps_dec->ps_dec_err_status->u1_err_flag & REJECT_CUR_PIC) == 0)
+                && (ps_dec->u4_pic_buf_got == 1))
         {
             /* Calling Function to deblock Picture and Display */
             ret = ih264d_deblock_display(ps_dec);
@@ -3231,6 +3267,11 @@ WORD32 ih264d_ctl(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
             ret = ih264d_get_frame_dimensions(dec_hdl, (void *)pv_api_ip,
                                               (void *)pv_api_op);
             break;
+        case IH264D_CMD_CTL_GET_VUI_PARAMS:
+            ret = ih264d_get_vui_params(dec_hdl, (void *)pv_api_ip,
+                                        (void *)pv_api_op);
+            break;
+
         case IH264D_CMD_CTL_SET_PROCESSOR:
             ret = ih264d_set_processor(dec_hdl, (void *)pv_api_ip,
                                        (void *)pv_api_op);
@@ -3456,6 +3497,72 @@ WORD32 ih264d_get_frame_dimensions(iv_obj_t *dec_hdl,
 
     return IV_SUCCESS;
 
+}
+
+WORD32 ih264d_get_vui_params(iv_obj_t *dec_hdl,
+                             void *pv_api_ip,
+                             void *pv_api_op)
+{
+    ih264d_ctl_get_vui_params_ip_t *ps_ip;
+    ih264d_ctl_get_vui_params_op_t *ps_op;
+    dec_struct_t *ps_dec = dec_hdl->pv_codec_handle;
+    dec_seq_params_t *ps_sps;
+    vui_t *ps_vui;
+    WORD32 i;
+    UWORD32 u4_size;
+
+    ps_ip = (ih264d_ctl_get_vui_params_ip_t *)pv_api_ip;
+    ps_op = (ih264d_ctl_get_vui_params_op_t *)pv_api_op;
+    UNUSED(ps_ip);
+
+    u4_size = ps_op->u4_size;
+    memset(ps_op, 0, sizeof(ih264d_ctl_get_vui_params_op_t));
+    ps_op->u4_size = u4_size;
+
+    if(NULL == ps_dec->ps_cur_sps)
+    {
+        ps_op->u4_error_code = ERROR_VUI_PARAMS_NOT_FOUND;
+        return IV_FAIL;
+    }
+
+    ps_sps = ps_dec->ps_cur_sps;
+    if((0 == ps_sps->u1_is_valid)
+                    || (0 == ps_sps->u1_vui_parameters_present_flag))
+    {
+        ps_op->u4_error_code = ERROR_VUI_PARAMS_NOT_FOUND;
+        return IV_FAIL;
+    }
+
+    ps_vui = &ps_sps->s_vui;
+
+    ps_op->u1_aspect_ratio_idc              = ps_vui->u1_aspect_ratio_idc;
+    ps_op->u2_sar_width                     = ps_vui->u2_sar_width;
+    ps_op->u2_sar_height                    = ps_vui->u2_sar_height;
+    ps_op->u1_overscan_appropriate_flag     = ps_vui->u1_overscan_appropriate_flag;
+    ps_op->u1_video_format                  = ps_vui->u1_video_format;
+    ps_op->u1_video_full_range_flag         = ps_vui->u1_video_full_range_flag;
+    ps_op->u1_colour_primaries              = ps_vui->u1_colour_primaries;
+    ps_op->u1_tfr_chars                     = ps_vui->u1_tfr_chars;
+    ps_op->u1_matrix_coeffs                 = ps_vui->u1_matrix_coeffs;
+    ps_op->u1_cr_top_field                  = ps_vui->u1_cr_top_field;
+    ps_op->u1_cr_bottom_field               = ps_vui->u1_cr_bottom_field;
+    ps_op->u4_num_units_in_tick             = ps_vui->u4_num_units_in_tick;
+    ps_op->u4_time_scale                    = ps_vui->u4_time_scale;
+    ps_op->u1_fixed_frame_rate_flag         = ps_vui->u1_fixed_frame_rate_flag;
+    ps_op->u1_nal_hrd_params_present        = ps_vui->u1_nal_hrd_params_present;
+    ps_op->u1_vcl_hrd_params_present        = ps_vui->u1_vcl_hrd_params_present;
+    ps_op->u1_low_delay_hrd_flag            = ps_vui->u1_low_delay_hrd_flag;
+    ps_op->u1_pic_struct_present_flag       = ps_vui->u1_pic_struct_present_flag;
+    ps_op->u1_bitstream_restriction_flag    = ps_vui->u1_bitstream_restriction_flag;
+    ps_op->u1_mv_over_pic_boundaries_flag   = ps_vui->u1_mv_over_pic_boundaries_flag;
+    ps_op->u4_max_bytes_per_pic_denom       = ps_vui->u4_max_bytes_per_pic_denom;
+    ps_op->u4_max_bits_per_mb_denom         = ps_vui->u4_max_bits_per_mb_denom;
+    ps_op->u4_log2_max_mv_length_horz       = ps_vui->u4_log2_max_mv_length_horz;
+    ps_op->u4_log2_max_mv_length_vert       = ps_vui->u4_log2_max_mv_length_vert;
+    ps_op->u4_num_reorder_frames            = ps_vui->u4_num_reorder_frames;
+    ps_op->u4_max_dec_frame_buffering       = ps_vui->u4_max_dec_frame_buffering;
+
+    return IV_SUCCESS;
 }
 
 WORD32 ih264d_set_num_cores(iv_obj_t *dec_hdl, void *pv_api_ip, void *pv_api_op)
