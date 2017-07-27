@@ -641,27 +641,6 @@ WORD32 ih264d_get_dpb_size(dec_seq_params_t *ps_seq)
     return (i4_size);
 }
 
-/***************************************************************************/
-/* If change in Level or the required PicBuffers i4_size is more than the  */
-/* current one FREE the current PicBuffers and allocate affresh            */
-/***************************************************************************/
-UWORD8 ih264d_is_sps_changed(prev_seq_params_t * ps_prv,
-                             dec_seq_params_t * ps_cur)
-{
-
-    if((ps_prv->u2_frm_wd_in_mbs != ps_cur->u2_frm_wd_in_mbs)
-                    || (ps_prv->u1_level_idc != ps_cur->u1_level_idc)
-                    || (ps_prv->u1_profile_idc != ps_cur->u1_profile_idc)
-                    || (ps_cur->u2_frm_ht_in_mbs != ps_prv->u2_frm_ht_in_mbs)
-                    || (ps_cur->u1_frame_mbs_only_flag
-                                    != ps_prv->u1_frame_mbs_only_flag)
-                    || (ps_cur->u1_direct_8x8_inference_flag
-                                    != ps_prv->u1_direct_8x8_inference_flag))
-        return 1;
-
-    return 0;
-}
-
 /**************************************************************************/
 /* This function initialises the value of ps_dec->u1_recon_mb_grp         */
 /* ps_dec->u1_recon_mb_grp must satisfy the following criteria            */
@@ -747,8 +726,7 @@ WORD32 ih264d_init_pic(dec_struct_t *ps_dec,
     /* If change in Level or the required PicBuffers i4_size is more than the  */
     /* current one FREE the current PicBuffers and allocate affresh            */
     /***************************************************************************/
-    if(!ps_dec->u1_init_dec_flag
-                    || ih264d_is_sps_changed(ps_prev_seq_params, ps_seq))
+    if(!ps_dec->u1_init_dec_flag)
     {
         ps_dec->u1_max_dec_frame_buffering = ih264d_get_dpb_size(ps_seq);
 
@@ -2003,10 +1981,7 @@ WORD16 ih264d_allocate_dynamic_bufs(dec_struct_t * ps_dec)
 
     /* Allocate memory for packed pred info */
     num_entries = u4_total_mbs;
-    if(1 == ps_dec->ps_cur_sps->u1_num_ref_frames)
-        num_entries *= 16;
-    else
-        num_entries *= 16 * 2;
+    num_entries *= 16 * 2;
 
     size = sizeof(pred_info_pkd_t) * num_entries;
     pv_buf = ps_dec->pf_aligned_alloc(pv_mem_ctxt, 128, size);

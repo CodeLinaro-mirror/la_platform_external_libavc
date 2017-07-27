@@ -791,6 +791,12 @@ WORD32 ih264d_parse_sps(dec_struct_t *ps_dec, dec_bit_stream_t *ps_bitstrm)
                     u1_level_idc, ps_seq->u2_total_num_of_mbs);
 
     u1_frm = ih264d_get_bit_h264(ps_bitstrm);
+    if((ps_dec->i4_header_decoded & 1) && (ps_seq->u1_frame_mbs_only_flag != u1_frm))
+    {
+        ps_dec->u1_res_changed = 1;
+        return IVD_RES_CHANGED;
+    }
+
     ps_seq->u1_frame_mbs_only_flag = u1_frm;
 
     COPYTHECONTEXT("SPS: frame_mbs_only_flag", u1_frm);
@@ -1158,6 +1164,16 @@ WORD32 ih264d_parse_nal_unit(iv_obj_t *dec_hdl,
                     /* ! */
                     ih264d_rbsp_to_sodb(ps_dec->ps_bitstrm);
                     i_status = ih264d_parse_sps(ps_dec, ps_bitstrm);
+                    ps_dec->u4_sps_cnt_in_process++;
+                    /*If a resolution change happens within a process call, due to multiple sps
+                     * we will not support it.
+                     */
+                    if((ps_dec->u4_sps_cnt_in_process > 1 ) &&
+                                    (i_status == IVD_RES_CHANGED))
+                    {
+                        i_status = ERROR_INV_SPS_PPS_T;
+                        ps_dec->u1_res_changed = 0;
+                    }
                     if(i_status == ERROR_INV_SPS_PPS_T)
                         return i_status;
                     if(!i_status)
