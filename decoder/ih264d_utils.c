@@ -1873,6 +1873,7 @@ WORD16 ih264d_allocate_dynamic_bufs(dec_struct_t * ps_dec)
     size = sizeof(parse_pmbarams_t) * (ps_dec->u1_recon_mb_grp);
     pv_buf = ps_dec->pf_aligned_alloc(pv_mem_ctxt, 128, size);
     RETURN_IF((NULL == pv_buf), IV_FAIL);
+    memset(pv_buf, 0, size);
     ps_dec->ps_parse_mb_data = pv_buf;
 
     size = sizeof(parse_part_params_t)
@@ -1978,10 +1979,7 @@ WORD16 ih264d_allocate_dynamic_bufs(dec_struct_t * ps_dec)
         num_entries = 1;
     }
     num_entries = ((2 * num_entries) + 1);
-    if(BASE_PROFILE_IDC != ps_dec->ps_cur_sps->u1_profile_idc)
-    {
-        num_entries *= 2;
-    }
+    num_entries *= 2;
 
     size = num_entries * sizeof(void *);
     size += PAD_MAP_IDX_POC * sizeof(void *);
@@ -1998,10 +1996,7 @@ WORD16 ih264d_allocate_dynamic_bufs(dec_struct_t * ps_dec)
 
     /* Allocate memory for packed pred info */
     num_entries = u4_total_mbs;
-    if(1 == ps_dec->ps_cur_sps->u1_num_ref_frames)
-        num_entries *= 16;
-    else
-        num_entries *= 16 * 2;
+    num_entries *= 16 * 2;
 
     size = sizeof(pred_info_pkd_t) * num_entries;
     pv_buf = ps_dec->pf_aligned_alloc(pv_mem_ctxt, 128, size);
