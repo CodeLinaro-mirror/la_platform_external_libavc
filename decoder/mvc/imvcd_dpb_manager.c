@@ -1154,13 +1154,21 @@ WORD32 imvcd_dpb_reorder_ref_pic_list(mvc_dpb_manager_t *ps_dpb_mgr,
             if((0 == pu1_modification_of_pic_nums_idc[0]) ||
                (1 == pu1_modification_of_pic_nums_idc[0]))
             {
-                WORD32 i4_mod_pic_num = 1 + pi4_abs_diff_pic_num_minus1[0];
+                WORD32 i4_mod_pic_num = pi4_abs_diff_pic_num_minus1[0];
+
                 UWORD8 u1_mod_buf_idx = u1_num_ref_bufs;
 
-                if(pi4_abs_diff_pic_num_minus1[0] > i4_max_pic_num)
+                /* According to section 7.4.3.1 from spec, */
+                /* this value is expected to be from the */
+                /* closed interval [0, i4_max_pic_num - 1] */
+                if((i4_mod_pic_num < 0) || (i4_mod_pic_num >= i4_max_pic_num))
                 {
                     return ERROR_DBP_MANAGER_T;
                 }
+
+                /* +1 not accounted during initialisation, */
+                /* mainly to preclude integer overflow */
+                i4_mod_pic_num++;
 
                 if(0 == pu1_modification_of_pic_nums_idc[0])
                 {
@@ -1243,8 +1251,20 @@ WORD32 imvcd_dpb_reorder_ref_pic_list(mvc_dpb_manager_t *ps_dpb_mgr,
             {
                 WORD32 i4_target_view_id;
 
-                WORD32 i4_mod_view_order_id = pi4_abs_diff_view_idx_minus1[0] + 1;
+                WORD32 i4_mod_view_order_id = pi4_abs_diff_view_idx_minus1[0];
                 UWORD8 u1_mod_buf_idx = u1_num_ref_bufs;
+
+                /* According to section H.7.4.3.1.1 from spec, */
+                /* this value is expected to be from the */
+                /* closed interval [0, u2_max_view_idx - 1] */
+                if((i4_mod_view_order_id < 0) || (i4_mod_view_order_id >= u2_max_view_idx))
+                {
+                    return ERROR_DBP_MANAGER_T;
+                }
+
+                /* +1 not accounted during initialisation, */
+                /* mainly to preclude integer overflow */
+                i4_mod_view_order_id++;
 
                 if(4 == pu1_modification_of_pic_nums_idc[0])
                 {
@@ -1265,9 +1285,7 @@ WORD32 imvcd_dpb_reorder_ref_pic_list(mvc_dpb_manager_t *ps_dpb_mgr,
                     }
                 }
 
-                if((0 == u2_view_order_id) ||
-                   !((i4_mod_view_order_id >= 0) && (i4_mod_view_order_id <= u2_max_view_idx)) ||
-                   (NULL == ps_mvc_ivp_ref_data))
+                if((0 == u2_view_order_id) || (NULL == ps_mvc_ivp_ref_data))
                 {
                     return ERROR_DBP_MANAGER_T;
                 }
@@ -1862,8 +1880,9 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
 
         UWORD32 u4_mmco;
         UWORD32 u4_diff_pic_num;
-        WORD32 i4_pic_num;
         UWORD32 u4_lt_idx;
+
+        UWORD32 au4_num_mmco_cmds[NUM_MMCO_CMD_IDS] = {0};
 
         for(j = 0; j < ps_dpb_cmds->u1_num_of_commands; j++)
         {
@@ -1885,12 +1904,10 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
                         return ERROR_DBP_MANAGER_T;
                     }
 
-                    i4_pic_num = i8_pic_num;
-
                     if(ps_dpb_mgr->u1_num_st_ref_bufs > 0)
                     {
-                        i4_error_code = imvcd_dpb_delete_st_node_or_make_lt(ps_dpb_mgr, i4_pic_num,
-                                                                            MAX_REF_BUFS + 1);
+                        i4_error_code = imvcd_dpb_delete_st_node_or_make_lt(
+                            ps_dpb_mgr, (WORD32) i8_pic_num, MAX_REF_BUFS + 1);
 
                         if(i4_error_code != OK)
                         {
@@ -1901,8 +1918,8 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
                     {
                         UWORD8 u1_dummy;
 
-                        i4_error_code =
-                            imvcd_dpb_delete_gap_frm_mmco(ps_dpb_mgr, i4_pic_num, &u1_dummy);
+                        i4_error_code = imvcd_dpb_delete_gap_frm_mmco(
+                            ps_dpb_mgr, (WORD32) i8_pic_num, &u1_dummy);
 
                         if(i4_error_code != OK)
                         {
@@ -1939,8 +1956,6 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
                         return ERROR_DBP_MANAGER_T;
                     }
 
-                    i4_pic_num = i8_pic_num;
-
                     u4_lt_idx = ps_mmc_params->u4_lt_idx;
 
                     if((ps_dpb_mgr->u1_max_lt_frame_idx == NO_LONG_TERM_INDICIES) ||
@@ -1951,8 +1966,8 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
 
                     if(ps_dpb_mgr->u1_num_st_ref_bufs > 0)
                     {
-                        i4_error_code =
-                            imvcd_dpb_delete_st_node_or_make_lt(ps_dpb_mgr, i4_pic_num, u4_lt_idx);
+                        i4_error_code = imvcd_dpb_delete_st_node_or_make_lt(
+                            ps_dpb_mgr, (WORD32) i8_pic_num, u4_lt_idx);
 
                         if(i4_error_code != OK)
                         {
@@ -1964,6 +1979,11 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
                 }
                 case SET_MAX_LT_INDEX:
                 {
+                    if(au4_num_mmco_cmds[SET_MAX_LT_INDEX] > 0)
+                    {
+                        return ERROR_DBP_MANAGER_T;
+                    }
+
                     u4_lt_idx =
                         ps_mmc_params->u4_max_lt_idx_plus1;  // Get Max_long_term_index_plus1
 
@@ -2036,6 +2056,11 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
                 }
                 case SET_LT_INDEX:
                 {
+                    if(au4_num_mmco_cmds[SET_LT_INDEX] > 0)
+                    {
+                        return ERROR_DBP_MANAGER_T;
+                    }
+
                     u4_lt_idx = ps_mmc_params->u4_lt_idx;  // Get long term index
 
                     if((ps_dpb_mgr->u1_max_lt_frame_idx == NO_LONG_TERM_INDICIES) ||
@@ -2070,34 +2095,52 @@ WORD32 imvcd_dpb_do_mmco(dpb_commands_t *ps_dpb_cmds, mvc_dpb_manager_t *ps_dpb_
 
                     break;
                 }
+                case RESET_REF_PICTURES:
+                {
+                    if((au4_num_mmco_cmds[RESET_REF_PICTURES] > 0) ||
+                       (au4_num_mmco_cmds[MARK_ST_PICNUM_AS_NONREF] > 0) ||
+                       (au4_num_mmco_cmds[MARK_LT_INDEX_AS_NONREF] > 0) ||
+                       (au4_num_mmco_cmds[MARK_ST_PICNUM_AS_LT_INDEX] > 0))
+                    {
+                        return ERROR_DBP_MANAGER_T;
+                    }
+
+                    if((j > 0) && (ps_dpb_cmds->as_mmc_params[j - 1].u4_mmco == SET_LT_INDEX))
+                    {
+                        return ERROR_DBP_MANAGER_T;
+                    }
+
+                    __attribute__((fallthrough));
+                }
+                case RESET_ALL_PICTURES:
+                {
+                    WORD32 i4_pic_num = ps_cur_au->i4_frame_num;
+
+                    imvcd_reset_dpb(ps_dpb_mgr);
+
+                    ps_cur_au->i4_frame_num = 0;
+
+                    if(!u1_marked_lt && u1_insert_st_pic)
+                    {
+                        i4_error_code = imvcd_dpb_insert_st_node(ps_dpb_mgr, ps_cur_au);
+
+                        if(i4_error_code != OK)
+                        {
+                            return i4_error_code;
+                        }
+                    }
+
+                    ps_cur_au->i4_frame_num = i4_pic_num;
+
+                    return OK;
+                }
                 default:
                 {
-                    break;
+                    return ERROR_DBP_MANAGER_T;
                 }
             }
 
-            if((u4_mmco == RESET_REF_PICTURES) || (u4_mmco == RESET_ALL_PICTURES))
-            {
-                i4_pic_num = ps_cur_au->i4_frame_num;
-
-                imvcd_reset_dpb(ps_dpb_mgr);
-
-                ps_cur_au->i4_frame_num = 0;
-
-                if(!u1_marked_lt && u1_insert_st_pic)
-                {
-                    i4_error_code = imvcd_dpb_insert_st_node(ps_dpb_mgr, ps_cur_au);
-
-                    if(i4_error_code != OK)
-                    {
-                        return i4_error_code;
-                    }
-                }
-
-                ps_cur_au->i4_frame_num = i4_pic_num;
-
-                return OK;
-            }
+            au4_num_mmco_cmds[u4_mmco]++;
         }
     }
 
