@@ -345,7 +345,7 @@ static IV_API_CALL_STATUS_T imvcd_view_ctxt_init(imvcd_create_ip_t *ps_ip,
     ps_view_ctxt->u1_pr_sl_type = 0xFF;
     ps_view_ctxt->u2_mbx = 0xffff;
     ps_view_ctxt->u2_mby = 0;
-    ps_view_ctxt->u2_total_mbs_coded = 0;
+    ps_view_ctxt->u4_total_mbs_coded = 0;
 
     ps_prev_poc = &ps_view_ctxt->s_prev_pic_poc;
     ps_cur_poc = &ps_view_ctxt->s_cur_pic_poc;
@@ -363,7 +363,7 @@ static IV_API_CALL_STATUS_T imvcd_view_ctxt_init(imvcd_create_ip_t *ps_ip,
 
     ps_view_ctxt->i4_max_poc = 0;
     ps_view_ctxt->i4_prev_max_display_seq = 0;
-    ps_view_ctxt->u1_recon_mb_grp = 4;
+    ps_view_ctxt->u4_recon_mb_grp = 4;
     ps_view_ctxt->i4_reorder_depth = -1;
     ps_view_ctxt->u1_second_field = 0;
     ps_view_ctxt->s_prev_seq_params.u1_eoseq_pending = 0;
@@ -737,9 +737,10 @@ static IV_API_CALL_STATUS_T imvcd_view_decode(iv_obj_t *ps_dec_hdl, imvcd_video_
               parsing than what was implied by the distance between successive
               start codes.The primary culprit is the NEXTBITS macro which requires
               reading 4 additional bytes of the bitstream buffer.To alleviate
-              this, 4 bytes per 4x4 TU have been additionally allocated to the
-              bitstream buffer. */
-            UWORD32 u4_nalu_buf_size = ((UWORD32) i4_nalu_length) + 8 + 4 * 16;
+              this, 16 bytes per 4x4 TU have been additionally allocated to the
+              bitstream buffer. Also, chroma bytes are added for 4:2:0/4:2:2 */
+
+            UWORD32 u4_nalu_buf_size = ((UWORD32) i4_nalu_length) + 8 + EXTRA_BS_OFFSET;
 
             if(u4_nalu_buf_size > u4_bitstream_buf_size)
             {
@@ -1041,7 +1042,7 @@ static IV_API_CALL_STATUS_T imvcd_finish_au_decode(mvc_dec_ctxt_t *ps_mvcd_ctxt,
         ps_cur_au->i4_poc = 0;
         ps_cur_au->i4_avg_poc = 0;
 
-        if(ps_view_ctxt->u2_total_mbs_coded == (ps_view_ctxt->ps_cur_sps->u2_max_mb_addr + 1))
+        if(ps_view_ctxt->u4_total_mbs_coded == (ps_view_ctxt->ps_cur_sps->u4_max_mb_addr + 1))
         {
             imvcd_reset_dpb(ps_dpb_mgr);
         }
